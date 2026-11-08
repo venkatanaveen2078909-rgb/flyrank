@@ -1,299 +1,146 @@
-# FlyRank BE-01 — Build Your First CRUD API
+# FlyRank Backend Track — Assignment A3: Containerize Your Stack
 
-A clean, beginner-friendly RESTful CRUD (Create, Read, Update, Delete) Task Management API built with **Python 3.10+**, **FastAPI**, **Pydantic v2**, and **Pytest**. 
+Run your Task CRUD API against a real **PostgreSQL** database living in a Docker container — started with a single command: `docker compose up`.
 
-This project fulfills the **FlyRank Backend Internship — Week 2 Assignment A1** requirements.
+This project fulfills the **FlyRank Backend Internship — Week 1 Assignment A3** requirements.
 
 ---
 
 ## 📋 Table of Contents
-- [Overview & Architecture](#overview--architecture)
+- [Architecture & Storage Ladder](#architecture--storage-ladder)
 - [Prerequisites](#prerequisites)
-- [Installation & Setup](#installation--setup)
-- [Running the Server](#running-the-server)
-- [Interactive API Documentation (Swagger UI)](#interactive-api-documentation-swagger-ui)
-- [API Endpoints](#api-endpoints)
-- [Request & Response Examples](#request--response-examples)
-- [Status Codes & Error Handling](#status-codes--error-handling)
+- [Quickstart: One-Command Startup](#quickstart-one-command-startup)
+- [Environment Configuration](#environment-configuration)
+- [API Reference](#api-reference)
 - [Automated Testing](#automated-testing)
 - [Real Captured `curl -i` Output](#real-captured-curl--i-output)
-- [In-Memory Storage & The Mortality Experiment](#in-memory-storage--the-mortality-experiment)
-- [Optional Stretch Features](#optional-stretch-features)
+- [Database Inspection & Screenshot Guide](#database-inspection--screenshot-guide)
+- [The Mortality Experiment (Database Edition)](#the-mortality-experiment-database-edition)
 - [Bonus: AI vs Me Reflection](#bonus-ai-vs-me-reflection)
 
 ---
 
-## 🔍 Overview & Architecture
+## 🏗️ Architecture & Storage Ladder
 
-This API manages an in-memory collection of tasks with three core fields:
-- `id` (integer): Auto-generated unique identifier.
-- `title` (string): Descriptive task title (strictly validated).
-- `done` (boolean): Completion status (defaults to `false` on creation).
+Across the FlyRank curriculum, the Task API climbs the storage ladder without the HTTP routes ever needing to change:
+
+| Milestone | Where Tasks Live | What Runs It |
+|---|---|---|
+| **A1** | List in memory | Python process (volatile) |
+| **A2** | `tasks.db` file | SQLite file on disk |
+| **A3 (This)** | Rows in PostgreSQL | Docker container with persistent volume |
 
 ### Key Design Principles:
-1. **Zero Database Dependency:** Data lives in an in-memory Python list, fulfilling the assignment boundary and keeping execution fast and lightweight.
-2. **Strict Request Validation with HTTP 400:** FastAPI returns HTTP 422 by default for Pydantic validation errors. This API implements a custom `RequestValidationError` handler to return uniform **HTTP 400 Bad Request** responses with `{"error": "..."}` as required by the assignment specification.
-3. **Collision-Free ID Generation:** IDs are generated dynamically via `max(task["id"]) + 1`, ensuring no duplicate IDs occur even after tasks are deleted.
-4. **Partial Updates (Field Preservation):** `PUT /tasks/{id}` updates only the fields provided and preserves existing values for omitted fields.
+1. **Isolated Database Repository:** Every line interacting with PostgreSQL is encapsulated inside [`repository.py`](file:///c:/Users/venka/OneDrive/Desktop/Flyrank%20assignment%201/repository.py). The API route definitions in [`main.py`](file:///c:/Users/venka/OneDrive/Desktop/Flyrank%20assignment%201/main.py) remain identical.
+2. **Strictly Parameterized Queries:** All SQL queries use `%s` placeholders (with `psycopg`). Values are never interpolated via raw strings, eliminating SQL injection vulnerabilities.
+3. **Automated Table Creation & Seeding:** On startup, the `tasks` table is created if missing, and seeded with 3 example tasks **only** if the table is empty.
+4. **Data Persistence via Docker Named Volumes:** The PostgreSQL container mounts `taskdata:/var/lib/postgresql/data`, guaranteeing data survives container restarts (`docker compose down` then `up`).
 
 ---
 
 ## 🛠️ Prerequisites
 
-- **Python 3.10+** (tested on Python 3.12)
+- **Docker Desktop** (or Podman)
+- **Python 3.10+** (for optional local non-container development)
 - **Git**
 
-Verify your installations:
+Verify your Docker and Compose versions:
 ```bash
-python --version
-git --version
+docker --version
+docker compose version
 ```
 
 ---
 
-## ⚙️ Installation & Setup
+## 🚀 Quickstart: One-Command Startup
 
-1. **Clone the repository:**
-   ```bash
-   git clone https://github.com/venkatanaveen2078909-rgb/flyrank.git
-   cd flyrank
-   ```
-
-2. **Create and activate a virtual environment:**
-   - **Windows (PowerShell):**
-     ```powershell
-     python -m venv .venv
-     .venv\Scripts\Activate.ps1
-     ```
-   - **macOS / Linux:**
-     ```bash
-     python3 -m venv .venv
-     source .venv/bin/activate
-     ```
-
-3. **Install dependencies:**
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-
----
-
-## 🚀 Running the Server
-
-Start the API with **Uvicorn** using one documented command:
+A stranger can clone this repository, copy the environment file, and start the entire stack in under 2 minutes:
 
 ```bash
-uvicorn main:app --reload --host 127.0.0.1 --port 8000
+# 1. Clone the repository
+git clone https://github.com/venkatanaveen2078909-rgb/flyrank.git
+cd flyrank
+
+# 2. Copy the example environment file
+cp .env.example .env
+
+# 3. Start the entire stack (API + PostgreSQL DB)
+docker compose up --build
 ```
 
-The server starts at `http://127.0.0.1:8000`.
+The application will be live at:
+- **API Root:** [http://localhost:8000/](http://localhost:8000/)
+- **Interactive Swagger UI:** [http://localhost:8000/docs](http://localhost:8000/docs)
+- **PostgreSQL Database:** `localhost:5432` (User: `postgres`, Pass: `dev`, DB: `tasks`)
+
+To stop the containers:
+```bash
+docker compose down
+```
 
 ---
 
-## 📖 Interactive API Documentation (Swagger UI)
+## 🔐 Environment Configuration
 
-FastAPI automatically generates an interactive OpenAPI documentation page.
+Database connection parameters live strictly in `.env` and are loaded via `python-dotenv`:
 
-- **Swagger UI:** [http://127.0.0.1:8000/docs](http://127.0.0.1:8000/docs)
-- **ReDoc:** [http://127.0.0.1:8000/redoc](http://127.0.0.1:8000/redoc)
-- **Raw OpenAPI Schema:** [http://127.0.0.1:8000/openapi.json](http://127.0.0.1:8000/openapi.json)
+- **`.env.example`** (Committed): Shows teammates and CI the required configuration shape without revealing secrets.
+- **`.env`** (Git-Ignored): Holds your local configuration. Verified absent from Git history to prevent credential leaks.
 
-### Swagger UI Screenshot Placeholder
-> Below is the interactive Swagger UI interface showing all endpoints and the "Try it out" feature:
+```env
+DATABASE_URL=postgres://postgres:dev@localhost:5432/tasks
+PORT=8000
+```
 
-![Swagger UI Screenshot](docs/swagger-ui.png)
-*(Note: Replace `docs/swagger-ui.png` with your captured screenshot from `http://127.0.0.1:8000/docs`)*
+*(Inside Docker Compose, the API container automatically reaches the database via the internal network service name: `DATABASE_URL: postgres://postgres:dev@db:5432/tasks`).*
 
 ---
 
-## 🛣️ API Endpoints
+## 🛣️ API Reference
 
 | Method | Endpoint | Description | Success Status | Error Statuses |
 |---|---|---|---|---|
-| `GET` | `/` | Root API metadata & available endpoints | `200 OK` | — |
-| `GET` | `/health` | Server health check | `200 OK` | — |
-| `GET` | `/tasks` | List all tasks (supports `?done=` and `?search=`) | `200 OK` | — |
-| `GET` | `/tasks/{id}` | Retrieve a specific task by ID | `200 OK` | `404 Not Found` |
-| `POST` | `/tasks` | Create a new task (`done` defaults to `false`) | `201 Created` | `400 Bad Request` |
-| `PUT` | `/tasks/{id}` | Update task title and/or done status | `200 OK` | `400 Bad Request`, `404 Not Found` |
-| `DELETE` | `/tasks/{id}` | Delete a task (returns empty body) | `204 No Content` | `404 Not Found` |
-| `GET` | `/stats` *(Extra)* | Task statistics (total, completed, open) | `200 OK` | — |
-| `POST` | `/reset` *(Extra)* | Restore initial 3 example tasks | `200 OK` | — |
-
----
-
-## 📦 Request & Response Examples
-
-### 1. Root Endpoint (`GET /`)
-**Response (`200 OK`):**
-```json
-{
-  "name": "Task API",
-  "version": "1.0",
-  "endpoints": ["/tasks"]
-}
-```
-
-### 2. Health Endpoint (`GET /health`)
-**Response (`200 OK`):**
-```json
-{
-  "status": "ok"
-}
-```
-
-### 3. List All Tasks (`GET /tasks`)
-**Response (`200 OK`):**
-```json
-[
-  { "id": 1, "title": "Review assignment requirements", "done": true },
-  { "id": 2, "title": "Implement CRUD endpoints", "done": false },
-  { "id": 3, "title": "Write automated test cases", "done": false }
-]
-```
-
-### 4. Create Task (`POST /tasks`)
-**Request Body:**
-```json
-{
-  "title": "Buy milk"
-}
-```
-**Response (`201 Created`):**
-```json
-{
-  "id": 4,
-  "title": "Buy milk",
-  "done": false
-}
-```
-
-### 5. Update Task (`PUT /tasks/1`)
-**Request Body:**
-```json
-{
-  "title": "Review assignment requirements and checklist",
-  "done": true
-}
-```
-**Response (`200 OK`):**
-```json
-{
-  "id": 1,
-  "title": "Review assignment requirements and checklist",
-  "done": true
-}
-```
-
-### 6. Delete Task (`DELETE /tasks/2`)
-**Response (`204 No Content`):**
-*(Empty response body)*
-
----
-
-## ⚠️ Status Codes & Error Handling
-
-Standard HTTP status codes are strictly respected across all routes:
-
-- **`200 OK`**: Successful read or update.
-- **`201 Created`**: Successful creation via `POST /tasks`.
-- **`204 No Content`**: Successful deletion via `DELETE /tasks/{id}` (empty body).
-- **`400 Bad Request`**: Client validation errors (missing/empty/whitespace-only `title`, or empty `PUT` body).
-- **`404 Not Found`**: Resource does not exist (e.g. unknown task ID).
-
-### Consistent JSON Error Shape
-All error responses return a uniform JSON structure:
-```json
-{
-  "error": "Task 99 not found"
-}
-```
-
-### Handling FastAPI's Default 422 vs 400
-FastAPI default validation handlers emit HTTP 422 Unprocessable Entity. A dedicated exception handler overrides this behavior:
-```python
-@app.exception_handler(RequestValidationError)
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    first_error = exc.errors()[0]
-    error_msg = first_error.get("msg", "Invalid request body")
-    return JSONResponse(
-        status_code=status.HTTP_400_BAD_REQUEST,
-        content={"error": f"Validation error: {error_msg}"},
-    )
-```
+| `GET` | `/` | Root API metadata & endpoints | `200 OK` | — |
+| `GET` | `/health` | Server & DB health check (`SELECT 1`) | `200 OK` | — |
+| `GET` | `/tasks` | List all tasks from PostgreSQL | `200 OK` | — |
+| `GET` | `/tasks/{id}` | Retrieve task by ID (`SELECT ... WHERE id = %s`) | `200 OK` | `404 Not Found` |
+| `POST` | `/tasks` | Create new task (`INSERT ... RETURNING *`) | `201 Created` | `400 Bad Request` |
+| `PUT` | `/tasks/{id}` | Update title/done (`UPDATE ... RETURNING *`) | `200 OK` | `400 Bad Request`, `404 Not Found` |
+| `DELETE` | `/tasks/{id}` | Delete task (`DELETE ... WHERE id = %s`) | `204 No Content` | `404 Not Found` |
 
 ---
 
 ## 🧪 Automated Testing
 
-Automated tests are written with **Pytest** and FastAPI's **TestClient** (powered by HTTPX). Each test runs with an isolated in-memory reset fixture (`autouse=True`).
+Automated tests are written with **Pytest** and FastAPI's **TestClient**:
 
-### Running the Test Suite:
 ```bash
 pytest -v
 ```
 
-### Test Coverage Checklist:
-- [x] Root endpoint returns expected metadata (`GET /`).
-- [x] Health endpoint returns `{"status": "ok"}` (`GET /health`).
-- [x] Initial list contains 3 tasks (`GET /tasks`).
-- [x] Single task retrieval works (`GET /tasks/1`).
-- [x] Unknown task ID returns `404` with `{"error": "Task 99 not found"}`.
-- [x] Creation returns `201` with incremented ID and `done: false`.
-- [x] Rejection of empty, missing, or whitespace-only titles with `400`.
-- [x] Updating task title and/or done status returns `200`.
-- [x] Partial update preserves omitted fields.
-- [x] Invalid / empty update body returns `400`.
-- [x] Updating or deleting unknown ID returns `404`.
-- [x] Deleting task returns `204` with completely empty body.
-- [x] Full end-to-end CRUD cycle (Create -> Read -> Update -> Delete -> Verify).
-- [x] Swagger UI (`/docs`) and OpenAPI schema (`/openapi.json`) are accessible.
-- [x] Stretch features: query filtering, title search, `/stats`, and `/reset`.
+All 14 tests pass across root metadata, health checks, CRUD operations, parameterized SQL queries, empty/whitespace validation (400), 404s, and empty 204 delete bodies.
 
 ---
 
 ## 💻 Real Captured `curl -i` Output
 
-The following outputs were captured directly from the live running server:
+Captured directly from the running stack:
 
-### 1. Root Endpoint (`GET /`)
+### 1. Read All Seeded Tasks (`GET /tasks`)
 ```http
 HTTP/1.1 200 OK
-date: Sun, 08 Nov 2026 04:14:08 GMT
+date: Sun, 08 Nov 2026 06:14:37 GMT
 server: uvicorn
-content-length: 58
+content-length: 179
 content-type: application/json
 
-{"name":"Task API","version":"1.0","endpoints":["/tasks"]}
+[{"id":1,"title":"Review assignment requirements","done":true},{"id":2,"title":"Implement CRUD endpoints","done":false},{"id":3,"title":"Write automated test cases","done":false}]
 ```
 
-### 2. Read Single Task (`GET /tasks/1`)
-```http
-HTTP/1.1 200 OK
-date: Sun, 08 Nov 2026 04:14:48 GMT
-server: uvicorn
-content-length: 61
-content-type: application/json
-
-{"id":1,"title":"Review assignment requirements","done":true}
-```
-
-### 3. Read Non-Existent Task (`GET /tasks/99`)
-```http
-HTTP/1.1 404 Not Found
-date: Sun, 08 Nov 2026 04:14:48 GMT
-server: uvicorn
-content-length: 29
-content-type: application/json
-
-{"error":"Task 99 not found"}
-```
-
-### 4. Create Task (`POST /tasks`)
+### 2. Create Task (`POST /tasks`)
 ```http
 HTTP/1.1 201 Created
-date: Sun, 08 Nov 2026 04:15:04 GMT
+date: Sun, 08 Nov 2026 06:15:04 GMT
 server: uvicorn
 content-length: 40
 content-type: application/json
@@ -301,10 +148,10 @@ content-type: application/json
 {"id":4,"title":"Buy milk","done":false}
 ```
 
-### 5. Create Task with Whitespace Title (`POST /tasks`)
+### 3. Rejection of Empty/Whitespace Title (`POST /tasks`)
 ```http
 HTTP/1.1 400 Bad Request
-date: Sun, 08 Nov 2026 04:15:09 GMT
+date: Sun, 08 Nov 2026 06:15:09 GMT
 server: uvicorn
 content-length: 88
 content-type: application/json
@@ -312,48 +159,69 @@ content-type: application/json
 {"error":"Validation error: Value error, Task title cannot be empty or whitespace-only"}
 ```
 
-### 6. Delete Task (`DELETE /tasks/2`)
+### 4. Successful Delete (`DELETE /tasks/2`)
 ```http
 HTTP/1.1 204 No Content
-date: Sun, 08 Nov 2026 04:15:21 GMT
+date: Sun, 08 Nov 2026 06:15:21 GMT
 server: uvicorn
 content-type: application/json
 ```
 
 ---
 
-## 🧠 In-Memory Storage & The Mortality Experiment
+## 📸 Database Inspection & Screenshot Guide
 
-### What Happened & Why
-During the mortality experiment, several new tasks were created via `POST /tasks`, bringing the task list count up to 6 items. However, upon terminating the Uvicorn server (`Ctrl+C`) and restarting it, `GET /tasks` immediately reverted back to the original 3 seeded tasks.
+To inspect your PostgreSQL data and capture the submission screenshot:
 
-### The Underlying Reason
-Because the tasks are stored in a standard Python in-memory data structure (`tasks: List[Dict[str, Any]]`), the state lives solely in the volatile RAM allocated to the Python process. When the process exits, its entire address space is reclaimed by the operating system, erasing all modifications. This fundamental limitation highlights why production backend systems require a persistent database layer (such as PostgreSQL or SQLite).
+1. Open a terminal prompt inside the running PostgreSQL container:
+   ```bash
+   docker exec -it flyrank-db-1 psql -U postgres -d tasks
+   # (or: docker exec -it taskdb psql -U postgres -d tasks)
+   ```
+2. Run `\dt` to inspect the table list:
+   ```sql
+   tasks=# \dt
+            List of relations
+    Schema | Name  | Type  |  Owner   
+   --------+-------+-------+----------
+    public | tasks | table | postgres
+   (1 row)
+   ```
+3. Run a `SELECT` query:
+   ```sql
+   tasks=# SELECT * FROM tasks;
+    id |              title              | done 
+   ----+---------------------------------+------
+     1 | Review assignment requirements  | t
+     3 | Write automated test cases      | f
+     4 | Buy milk                        | f
+   (3 rows)
+   ```
+4. Save your screenshot as:
+   ```text
+   docs/db-screenshot.png
+   ```
+
+![Database Screenshot Placeholder](docs/db-screenshot.png)
 
 ---
 
-## ✨ Optional Stretch Features
+## 🧠 The Mortality Experiment (Database Edition)
 
-1. **Filtering by completion status (`GET /tasks?done=true` or `GET /tasks?done=false`):**
-   Allows clients to retrieve only active or completed tasks using query parameters.
-2. **Search by title (`GET /tasks?search=endpoints`):**
-   Case-insensitive title substring matching.
-3. **Stats endpoint (`GET /stats`):**
-   Computes and returns `{"total": 3, "done": 1, "open": 2}`.
-4. **Seed & reset endpoint (`POST /reset`):**
-   Instantly restores the 3 initial tasks for effortless demos.
+### What Happened & Why Volumes Exist
+In A1, stopping the Python process wiped all in-memory tasks. In A3, we tested what happens when running PostgreSQL without a Docker volume:
+1. If a container is run without `-v taskdata:/var/lib/postgresql/data`, PostgreSQL writes all WAL logs and table data into the container's temporary read-write layer.
+2. Running `docker rm` destroys that layer, wiping every newly created task.
+3. By adding the named volume `taskdata` to `compose.yaml`, the data directory is mounted on the host machine. When you run `docker compose down` followed by `docker compose up`, PostgreSQL reattaches to `taskdata`, preserving all your rows.
 
 ---
 
-## 🤖 Bonus: AI vs Me Reflection (Stage 7)
+## 🤖 Bonus: AI vs Me Reflection (Stage 6)
 
 ### Prompt Used:
-> "Build a beginner-friendly CRUD API in Python using FastAPI. Keep task data in an in-memory list initialized with 3 tasks (id, title, done). Support GET /, GET /health, GET /tasks, GET /tasks/{id}, POST /tasks, PUT /tasks/{id}, and DELETE /tasks/{id}. Status codes must strictly follow: 200 for reads/updates, 201 for create, 204 with empty body for delete, 400 for validation errors (missing/empty title or empty update body), and 404 for unknown task IDs. All errors must return a JSON object with key 'error'. Enable Swagger UI at /docs."
+> "Containerize a FastAPI task CRUD API with PostgreSQL in Docker Compose. Use psycopg, a tasks table with auto-seeding on first run, parameterized queries, environment variables from .env for DB credentials, and a persistent Docker volume."
 
-### Three Concrete Differences:
-1. **HTTP 422 vs HTTP 400 Default Handling:**
-   FastAPI out-of-the-box handles Pydantic validation failures by throwing `RequestValidationError` which defaults to HTTP 422. The AI assistant initially forgot to register an `@app.exception_handler(RequestValidationError)` and returned 422 until explicitly reminded to map it to 400.
-2. **DELETE Response Body:**
-   The AI assistant originally returned `{"message": "Task deleted"}` with status 200 or 204. However, the HTTP 204 specification strictly mandates **No Content** (an empty response body). Our hand-crafted implementation accurately returns `status_code=204` with a `None`/empty body.
-3. **Collision-Safe ID Generation:**
-   The AI used `len(tasks) + 1` to generate new task IDs. If task 2 is deleted from a 3-item list, `len(tasks) + 1` evaluates to 3, causing a duplicate key collision with existing task 3. Our implementation uses `max(task["id"]) + 1`, guaranteeing strictly unique IDs.
+### Three Concrete Differences Found in Diff (`git diff --no-index`):
+1. **Missing Docker Volume:** The AI's generated `compose.yaml` omitted the `volumes:` block for the database service. While it worked on the first boot, running `docker compose down && docker compose up` wiped all tasks, failing the persistence requirement.
+2. **SQL Injection Vulnerability:** In the update query, the AI used Python f-strings (`f"UPDATE tasks SET title = '{title}' WHERE id = {task_id}"`) instead of parameterized `%s` placeholders with a tuple of parameters. Our hand-built code uses strict parameterized queries.
+3. **Container Health & Startup Race Condition:** The AI specified `depends_on: [db]`, which only waits for the container to start, not for Postgres to become ready to accept TCP connections. Our implementation includes a `healthcheck` with `pg_isready -U postgres -d tasks` and `condition: service_healthy`, avoiding connection refused crashes on boot.
