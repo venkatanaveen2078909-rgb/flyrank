@@ -5,6 +5,8 @@ from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
+from src.llm.client import triage_message
+from src.llm.schema import TriageInput, TriageOutput
 import repository
 
 
@@ -203,3 +205,28 @@ def delete_task(task_id: int) -> None:
             detail="Task not found",
         )
     return None
+
+
+@app.post(
+    "/triage",
+    response_model=TriageOutput,
+    status_code=status.HTTP_200_OK,
+    responses={
+        400: {
+            "description": "Validation error on input",
+            "content": {"application/json": {"example": {"error": "Validation error: Support message text cannot be empty"}}},
+        },
+        422: {
+            "description": "Model output unprocessable",
+            "content": {"application/json": {"example": {"error": "Model output could not be validated against schema"}}},
+        },
+        504: {
+            "description": "LLM Provider Timeout",
+            "content": {"application/json": {"example": {"error": "LLM model request timed out after 30 seconds"}}},
+        },
+    },
+    tags=["LLM Triage"],
+)
+def triage_support_ticket(payload: TriageInput) -> TriageOutput:
+    """Classify incoming customer support messages into closed categories with an LLM."""
+    return triage_message(payload.text)
