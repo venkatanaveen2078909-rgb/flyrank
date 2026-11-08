@@ -55,8 +55,8 @@ git --version
 
 1. **Clone the repository:**
    ```bash
-   git clone <YOUR_REPOSITORY_URL>
-   cd "Flyrank assignment 1"
+   git clone https://github.com/venkatanaveen2078909-rgb/flyrank.git
+   cd flyrank
    ```
 
 2. **Create and activate a virtual environment:**
