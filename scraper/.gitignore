@@ -1,0 +1,8 @@
+# Ignore cached HTML files
+cache/
+*.html
+
+# Python cache & virtualenv
+__pycache__/
+*.py[cod]
+.pytest_cache/
